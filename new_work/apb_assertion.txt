@@ -1,0 +1,95 @@
+//------------------sequence----------------------- 
+sequence idale_phase;
+	!psel;
+endsequence
+sequence setup_phase;
+	psel && !penable;
+endsequence 
+sequence access_phase_with_wait;
+	psel && penable && !pready;
+endsequence
+sequence access_phase;
+	psel && penable && pready;
+endsequence 
+
+//---------------------property-------------------------
+
+// ideal phase to setup phase 
+property idle_state;
+   @(posedge pclk) disable iff(!prstn) idale_phase |=> setup_phase;
+endproperty: idle_state
+
+ideal_state: assert property (idle_state) else $display("[%0t] Error! The transfer must start with setup phase (PSEL=1, PENABLE=0)", $time) ;
+				      
+//----------------------------------------------------
+// setup phase to acces phase with wait
+property setup_state ;
+   @(posedge pclk) disable iff(!prstn)
+      setup_phase |=> access_phase_with_wait ;
+endproperty
+
+state_setups : assert property (setup_state) 
+                                  else $display("[%0t] Error! The setup phase must proceed to access phase (PSEL=1, PENABLE=0) after 1 clk.", $time) ;
+
+
+//-----------------------------------------------------------
+// access phase with wait to acces phase 
+property access_wait_state ;
+   @(posedge pclk) disable iff(!prstn)
+      access_phase_with_wait |=>  access_phase ;
+endproperty
+ state_access_with_waits : assert property (access_wait_state) 
+                                  else $display("[%0t] Error! The transfer must stay in access phase (wait state (PREADY=0) or proceed to finish (PREADY=1).", $time) ;
+
+
+//-------------------------------------------------------------------------
+// access phase to ideal phase or setup phase 
+property access_last_state ;
+   @(posedge pclk) disable iff(!prstn)
+      access_phase |=> setup_phase or idale_phase;
+endproperty
+state_access_lasts : assert property (access_last_state) 
+                                  else $display("[%0t] Error! After a transfer finished, must proceed to IDLE (PSEL=0) or setup phase (PSEL=1, PENABLE=0).",  $time) ;
+
+
+//----------------------------------------------------------------------------
+//property to check if signal stable during the transfer. If the signal changed means the state became IDLE or SETUP, i.e. the transfer just finished.
+//!$stable mening is change over last cycle 
+
+property signal_stable(signal);
+   @(posedge pclk) disable iff(!prstn)
+       setup_phase or idale_phase |-> !$stable(signal) ;
+
+endproperty
+
+PWDATA_SIGNAL_STABLE : assert property(signal_stable(pwdata))
+                else
+				$display("pwdata is not stable  %0t",$time);
+				
+PADDR_SIGNAL_STABLE : assert property (signal_stable(paddr))
+                else
+                $display("paddr is not stable  %0t",$time);		
+
+
+//-------------------------------------------------------------------------------------------
+
+// read transfer time need to strobe single is low
+/*property pstrb_low_at_read; 
+   @(posedge pclk) disable iff(!prstn)
+      psel && !pwrite |-> pstrb == [(`STROB_WIDTH-1):0]{1'b0}} ;//data width by 8
+endproperty*/
+
+/*PRDATA_SIGNAL_STABLE : assert property(signal_stable(prdata))
+                else
+				$display("pwdata is not stable  %0t",$time);
+				
+PADDR_SIGNAL_STABLE : assert property (signal_stable(paddr))
+                else
+                $display("paddr is not stable  %0t",$time);*/
+/*PSTROB_SIGNAL_LOW : assert property(signal_stable(pstrb))
+                else
+				$display("pstrb is not low  %0t",$time);*/
+				
+//----------------------------------------------------------------------------------------------
+
+
